@@ -37,8 +37,9 @@ def render(job,image_path,font_path,out):
 
 def run():
  origin=os.environ['MATSPRELL_ORIGIN'].rstrip('/');token=os.environ['SOCIAL_RUNNER_TOKEN'];assert origin.startswith('https://') and len(token)>=32
+ agent={'User-Agent':'MatsprellSocialRunner/1.0 (+https://www.matsprell.no)'}
  def request(path,method='POST',body=b'',extra=None):
-  req=urllib.request.Request(origin+path,data=body,method=method,headers={'Authorization':'Bearer '+token,**(extra or {})})
+  req=urllib.request.Request(origin+path,data=body,method=method,headers={**agent,'Authorization':'Bearer '+token,**(extra or {})})
   with urllib.request.urlopen(req,timeout=90) as r:return json.load(r)
  request('/api/social/tick')
  with tempfile.TemporaryDirectory() as td:
@@ -50,7 +51,9 @@ def run():
    for url in (job['image'],job['font']):
     parsed=urllib.parse.urlparse(url)
     if parsed.scheme!='https' or parsed.hostname not in ['www.matsprell.no','matsprell.no']:raise RuntimeError('Unexpected source host')
-   image=td/'image';font=td/'font.ttf';urllib.request.urlretrieve(job['image'],image);urllib.request.urlretrieve(job['font'],font)
+   image=td/'image';font=td/'font.ttf'
+   for url,target in [(job['image'],image),(job['font'],font)]:
+    with urllib.request.urlopen(urllib.request.Request(url,headers=agent),timeout=90) as source:target.write_bytes(source.read())
    output=td/('output.mp4' if job['kind']=='reel' else 'output.jpg');render(job,image,font,output)
    request('/api/social/render','PUT',output.read_bytes(),{'X-Render-ID':job['id'],'Content-Type':'video/mp4' if job['kind']=='reel' else 'image/jpeg'})
  for _ in range(4):
